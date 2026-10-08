@@ -3,971 +3,870 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-Time Interactive Map & Shading Tool</title>
+  <title>FiveM Live Collaborative Map</title>
+
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <!-- Firebase SDKs for Real-Time Sync across multiple users -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Google Font: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    * {
-      cursor: default !important;
-    }
     body {
-      user-select: none;
-    }
-    .map-viewport {
+      font-family: 'Inter', sans-serif;
       overflow: hidden;
-      touch-action: none;
     }
-    .map-marker {
-      transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    #map {
+      width: 100vw;
+      height: 100vh;
+      background-color: #0b0f19;
+      cursor: crosshair;
     }
-    .map-marker:hover {
-      transform: translate(-50%, -100%) scale(1.25);
-      z-index: 50 !important;
+    /* Custom Leaflet Dark Popup Styles */
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: #1e293b !important;
+      color: #f8fafc !important;
+      border: 1px solid #334155;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      border-radius: 0.875rem !important;
     }
-    .pin-tooltip {
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.2s ease, transform 0.2s ease;
-      transform: translate(-50%, 10px);
+    .leaflet-popup-content {
+      margin: 12px 14px !important;
+      line-height: 1.4 !important;
     }
-    .group:hover .pin-tooltip {
-      opacity: 1;
-      transform: translate(-50%, 0);
+    .leaflet-container a.leaflet-popup-close-button {
+      color: #94a3b8 !important;
+      padding: 8px !important;
     }
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 6px;
+    .leaflet-container a.leaflet-popup-close-button:hover {
+      color: #f8fafc !important;
     }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #1f2937;
+    .leaflet-control-attribution {
+      display: none !important;
     }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #4b5563;
-      border-radius: 3px;
+    /* Custom Map Pin Pulse Effect */
+    @keyframes pin-pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: 0.85; }
+      100% { transform: scale(1); opacity: 1; }
     }
-    .mode-btn-active {
-      background-color: #4f46e5 !important;
-      color: #ffffff !important;
-      border-color: #6366f1 !important;
+    .ping-marker-active {
+      animation: pin-pulse 2.5s infinite ease-in-out;
     }
-    .filter-pill-inactive {
-      opacity: 0.35;
-      filter: grayscale(0.6);
-    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { height: 4px; width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   </style>
 </head>
-<body class="bg-gray-950 text-gray-100 h-screen flex flex-col font-sans overflow-hidden">
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen w-screen select-none">
 
-  <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex flex-wrap items-center justify-between z-20 shrink-0 gap-4">
+  <header class="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-700/60 shadow-2xl">
+    
+    <!-- Left: Branding & Search -->
     <div class="flex items-center gap-3">
-      <div class="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg border border-indigo-500/30">
-        <i class="fa-solid fa-map-location-dot text-xl"></i>
+      <div class="flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700">
+        <i class="fa-solid fa-map-location-dot text-indigo-400 text-lg"></i>
+        <span class="font-bold text-sm tracking-wide bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent">FiveM Intel Map</span>
       </div>
-      <div>
-        <h1 class="text-lg font-bold tracking-wide text-white leading-tight flex items-center gap-2">
-          Interactive Map & Shading Tool
-          <span id="syncStatus" class="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-normal">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Connected
-          </span>
-        </h1>
-        <p class="text-xs text-gray-400">Drop pings, shade/paint custom regions, and collaborate live in real-time</p>
+
+      <!-- Search Box -->
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+        <input type="text" id="searchInput" placeholder="Search markers & zones..." 
+               class="bg-slate-800/90 text-xs text-slate-100 pl-8 pr-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 w-36 sm:w-48 transition-all">
       </div>
     </div>
 
-    <!-- Mode Toggle Toolbar -->
-    <div class="flex items-center bg-gray-950 border border-gray-800 p-1 rounded-xl gap-1">
-      <button id="modePinBtn" class="mode-btn-active px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-400 border border-transparent transition">
-        <i class="fa-solid fa-location-dot"></i> Pin Mode
-      </button>
-      <button id="modeDrawBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-400 border border-transparent transition">
-        <i class="fa-solid fa-paint-brush"></i> Shade / Paint
-      </button>
-      <button id="modeEraseBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-400 border border-transparent transition">
-        <i class="fa-solid fa-eraser"></i> Eraser
-      </button>
-    </div>
-
-    <!-- Actions & Stats -->
-    <div class="flex items-center gap-3">
-      <div class="flex items-center bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 gap-3">
-        <span class="flex items-center gap-1.5">
-          <i class="fa-solid fa-location-pin text-indigo-400"></i>
-          <span id="pinCount" class="font-bold text-white">0</span> Pins
-        </span>
-        <span class="text-gray-600">|</span>
-        <span class="flex items-center gap-1.5">
-          <i class="fa-solid fa-palette text-indigo-400"></i>
-          <span id="strokeCount" class="font-bold text-white">0</span> Strokes
-        </span>
-        <span class="text-gray-600">|</span>
-        <span class="flex items-center gap-1.5">
-          <i class="fa-solid fa-magnifying-glass-plus text-indigo-400"></i>
-          <span id="zoomLevelDisplay" class="font-bold text-white">100%</span>
-        </span>
+    <!-- Center: Mode Switcher & Shading Controls -->
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700/80 shadow-inner">
+        <button id="modePingBtn" class="mode-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow">
+          <i class="fa-solid fa-location-dot"></i> Add Ping
+        </button>
+        <button id="modeShadeBtn" class="mode-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all">
+          <i class="fa-solid fa-draw-polygon"></i> Add Shading
+        </button>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button id="resetZoomBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5">
-          <i class="fa-solid fa-compress"></i> Reset View
-        </button>
-        <button id="exportBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
-          <i class="fa-solid fa-download"></i> Export Data
-        </button>
-        <button id="clearDrawingsBtn" class="bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border border-amber-800/50 text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5">
-          <i class="fa-solid fa-paint-brush"></i> Clear Shading
-        </button>
-        <button id="clearAllBtn" class="bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/50 text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5">
-          <i class="fa-solid fa-trash-can"></i> Clear All
-        </button>
+      <!-- Shading Customization Controls -->
+      <div id="shadingControls" class="hidden flex items-center gap-3 bg-slate-800/90 border border-slate-700 px-3 py-1 rounded-xl text-xs">
+        <!-- Brush Size -->
+        <div class="flex items-center gap-1.5" title="Brush Size">
+          <i class="fa-solid fa-paint-brush text-slate-400 text-[11px]"></i>
+          <input type="range" id="brushSizeInput" min="2" max="40" value="12" class="w-16 accent-indigo-500 cursor-pointer">
+          <span id="brushSizeVal" class="text-[11px] text-slate-300 w-5 text-right font-mono">12px</span>
+        </div>
+
+        <div class="w-px h-4 bg-slate-700"></div>
+
+        <!-- Opacity Slider -->
+        <div class="flex items-center gap-1.5" title="Opacity / Transparency">
+          <i class="fa-solid fa-circle-half-stroke text-slate-400 text-[11px]"></i>
+          <input type="range" id="shadeOpacityInput" min="10" max="100" value="40" class="w-16 accent-indigo-500 cursor-pointer">
+          <span id="shadeOpacityVal" class="text-[11px] text-slate-300 w-8 text-right font-mono">40%</span>
+        </div>
+
+        <div class="w-px h-4 bg-slate-700"></div>
+
+        <!-- Custom Shading Color Picker -->
+        <div class="flex items-center gap-1.5" title="Shading Color">
+          <i class="fa-solid fa-palette text-slate-400 text-[11px]"></i>
+          <input type="color" id="shadeColorInput" value="#3b82f6" class="w-5 h-5 bg-transparent border-0 cursor-pointer rounded">
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Category Creation & Sync Status -->
+    <div class="flex items-center gap-2">
+      <button id="openCategoryModalBtn" class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 rounded-xl text-xs font-semibold text-emerald-300 transition shadow-sm">
+        <i class="fa-solid fa-plus text-emerald-400"></i> Add Category
+      </button>
+
+      <button id="clearAllBtn" class="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 border border-red-700/50 text-red-300 rounded-xl text-xs font-medium transition">
+        <i class="fa-solid fa-trash-can"></i> Clear
+      </button>
+      
+      <!-- Realtime Sync Badge -->
+      <div id="syncBadge" class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 rounded-xl border border-slate-700 text-[11px] text-slate-400">
+        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" id="syncDot"></span>
+        <span id="syncText">Offline Mode</span>
       </div>
     </div>
   </header>
 
-  <div id="drawingToolbar" class="bg-gray-900/90 border-b border-gray-800 px-6 py-2 flex items-center justify-between text-xs transition-all duration-200 hidden">
-    <div class="flex items-center gap-6">
-      <!-- Brush Color Picker -->
-      <div id="brushColorContainer" class="flex items-center gap-2">
-        <span class="text-gray-400 font-semibold uppercase tracking-wider text-[10px]">Shade Color:</span>
-        <div class="flex items-center gap-2" id="brushColorPicker">
-          <button type="button" data-color="#ef4444" class="brush-color-opt w-5 h-5 rounded-full bg-red-500 ring-2 ring-white/90 transition scale-110"></button>
-          <button type="button" data-color="#3b82f6" class="brush-color-opt w-5 h-5 rounded-full bg-blue-500 transition"></button>
-          <button type="button" data-color="#10b981" class="brush-color-opt w-5 h-5 rounded-full bg-emerald-500 transition"></button>
-          <button type="button" data-color="#f59e0b" class="brush-color-opt w-5 h-5 rounded-full bg-amber-500 transition"></button>
-          <button type="button" data-color="#8b5cf6" class="brush-color-opt w-5 h-5 rounded-full bg-purple-500 transition"></button>
-          <button type="button" data-color="#ec4899" class="brush-color-opt w-5 h-5 rounded-full bg-pink-500 transition"></button>
-          <button type="button" data-color="#ffffff" class="brush-color-opt w-5 h-5 rounded-full bg-white transition"></button>
-        </div>
-      </div>
-
-      <!-- Opacity Slider -->
-      <div id="brushOpacityContainer" class="flex items-center gap-2">
-        <span class="text-gray-400 font-semibold uppercase tracking-wider text-[10px]">Transparency:</span>
-        <input type="range" id="brushOpacity" min="0.05" max="0.9" step="0.05" value="0.35" class="w-24 accent-indigo-500">
-        <span id="opacityDisplay" class="font-mono text-gray-300 min-w-[32px]">35%</span>
-      </div>
-
-      <!-- Brush Size Slider -->
-      <div class="flex items-center gap-2">
-        <span class="text-gray-400 font-semibold uppercase tracking-wider text-[10px]">Brush Size:</span>
-        <input type="range" id="brushSize" min="5" max="80" step="5" value="25" class="w-24 accent-indigo-500">
-        <span id="brushSizeDisplay" class="font-mono text-gray-300 min-w-[28px]">25px</span>
-      </div>
-    </div>
-
-    <div id="toolTipBanner" class="text-xs text-indigo-300 bg-indigo-950/60 border border-indigo-800/40 px-3 py-1 rounded-lg flex items-center gap-2">
-      <i class="fa-solid fa-paintbrush"></i> Left Click = Draw Shading | Middle Click Drag = Pan Map
-    </div>
+  <!-- Top Category Legend Bar -->
+  <div class="absolute top-20 left-3 right-3 z-[999] flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar pointer-events-auto" id="categoryLegendBar">
+    <!-- Dynamic Category Legend Chips injected here -->
   </div>
 
-  <div class="flex-1 flex overflow-hidden relative">
+  <!-- Leaflet Map Container -->
+  <div id="map"></div>
 
-    <!-- Map Area Container -->
-    <div class="flex-1 relative bg-gray-900 flex items-center justify-center p-4 overflow-hidden">
-      
-      <!-- Viewport Frame -->
-      <div id="viewport" class="map-viewport relative w-full h-full max-h-[85vh] flex items-center justify-center rounded-xl bg-gray-950 border border-gray-800 shadow-2xl">
-        
-        <!-- Zoom & Pan Transformation Layer -->
-        <div id="zoomContainer" class="relative inline-block origin-center transition-transform duration-75 ease-out max-w-full max-h-full">
-          
-          <!-- Base Map Image -->
-          <img id="mapImage" src="https://r2.fivemanage.com/5wGi5zx33QLzqLkxqL7ZI/Gemini_Generated_Image_8xr7wn8xr7wn8xr7.jpg" alt="GTA Map" class="max-h-[80vh] w-auto h-auto object-contain block select-none rounded pointer-events-auto" draggable="false" />
-
-          <!-- Canvas Shading Layer -->
-          <canvas id="paintCanvas" class="absolute inset-0 w-full h-full rounded pointer-events-auto z-10"></canvas>
-
-          <!-- Overlay Layer for Pin Markers -->
-          <div id="pinOverlay" class="absolute inset-0 pointer-events-none z-20"></div>
-
-        </div>
-
-        <!-- Floating Zoom Controls -->
-        <div class="absolute bottom-6 right-6 flex flex-col bg-gray-900/90 backdrop-blur border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-30">
-          <button id="zoomInBtn" class="p-3 text-gray-300 hover:text-white hover:bg-gray-800 transition border-b border-gray-800" title="Zoom In">
-            <i class="fa-solid fa-plus"></i>
-          </button>
-          <button id="zoomOutBtn" class="p-3 text-gray-300 hover:text-white hover:bg-gray-800 transition" title="Zoom Out">
-            <i class="fa-solid fa-minus"></i>
-          </button>
-        </div>
-
-      </div>
-    </div>
-
-    <aside class="w-80 bg-gray-900 border-l border-gray-800 flex flex-col z-10 shrink-0">
-      <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-        <h2 class="font-bold text-sm tracking-wide text-gray-200 flex items-center gap-2">
-          <i class="fa-solid fa-list-ul text-indigo-400"></i> Live Directory
-        </h2>
-        <span id="sidebarCount" class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full font-mono">0</span>
-      </div>
-
-      <!-- Color Category Filter Bar -->
-      <div class="p-3 border-b border-gray-800 bg-gray-950/40 space-y-2">
-        <div class="flex items-center justify-between text-[11px]">
-          <span class="text-gray-400 font-semibold uppercase tracking-wider">Filter Category Tags</span>
-          <button id="editTagsBtn" class="text-indigo-400 hover:text-indigo-300 font-medium text-[10px] flex items-center gap-1 transition">
-            <i class="fa-solid fa-gear"></i> + New Tag / Edit
-          </button>
-        </div>
-        <div id="colorFiltersContainer" class="flex items-center gap-1.5 flex-wrap">
-          <!-- Filter pills injected dynamically -->
-        </div>
-      </div>
-
-      <!-- Search Filter -->
-      <div class="p-3 border-b border-gray-800">
-        <div class="relative">
-          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-gray-500"></i>
-          <input type="text" id="searchInput" placeholder="Search locations..." class="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 transition placeholder-gray-600">
-        </div>
-      </div>
-
-      <!-- Scrollable List -->
-      <div id="pinList" class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-        <div id="emptyState" class="text-center py-12 px-4">
-          <div class="w-12 h-12 rounded-full bg-gray-800/60 border border-gray-700/50 flex items-center justify-center mx-auto mb-3 text-gray-500">
-            <i class="fa-solid fa-map-pin text-lg"></i>
-          </div>
-          <p class="text-xs font-medium text-gray-400">No location pings found</p>
-          <p class="text-[11px] text-gray-600 mt-1">Click anywhere on the map image to mark a location</p>
-        </div>
-      </div>
-    </aside>
-
-  </div>
-
-  <!-- Naming Modal -->
-  <div id="namingModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 opacity-0 pointer-events-none transition-opacity duration-200">
-    <div class="bg-gray-900 border border-gray-700 w-full max-w-md rounded-2xl p-6 shadow-2xl transform scale-95 transition-transform duration-200" id="modalContainer">
-      
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
-            <i class="fa-solid fa-tag"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-white text-base">Name Your Location</h3>
-            <p class="text-xs text-gray-400">Select a category tag to color and identify your pin</p>
-          </div>
-        </div>
-      </div>
-
-      <form id="pinForm" class="space-y-4" onsubmit="return false;">
-        <div>
-          <label for="pinNameInput" class="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
-            Location Name <span class="text-red-400">*</span>
-          </label>
-          <input type="text" id="pinNameInput" required placeholder="e.g. Secret Stash, Base HQ, Airport..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
-            Category Tag & Color
-          </label>
-          <div class="flex items-center gap-2 flex-wrap" id="colorPicker">
-            <!-- Rendered dynamically -->
-          </div>
-        </div>
-
-        <div>
-          <label for="pinNotesInput" class="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
-            Notes (Optional)
-          </label>
-          <textarea id="pinNotesInput" rows="2" placeholder="Add optional details or description..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition custom-scrollbar resize-none"></textarea>
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-800">
-          <button type="button" id="cancelPinBtn" class="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white transition">
-            Cancel
-          </button>
-          <button type="submit" id="savePinBtn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
-            <i class="fa-solid fa-check"></i> Save Ping
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Tag Label & Color Manager Modal -->
-  <div id="tagEditorModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 opacity-0 pointer-events-none transition-opacity duration-200">
-    <div class="bg-gray-900 border border-gray-700 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between">
-        <h3 class="font-bold text-white text-base flex items-center gap-2">
-          <i class="fa-solid fa-tags text-indigo-400"></i> Manage Categories & Colors
+  <!-- Ping Creation Modal -->
+  <div id="pingModal" class="fixed inset-0 z-[2000] hidden flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+        <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+          <i class="fa-solid fa-location-dot text-indigo-400"></i> Place Marker Ping
         </h3>
-        <button id="closeTagEditorBtn" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
-      </div>
-      <p class="text-xs text-gray-400">Customize labels or add new color categories for all users.</p>
-
-      <div id="tagInputsContainer" class="space-y-2.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-        <!-- Input fields injected dynamically -->
+        <button id="closePingModal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
-      <!-- Add New Category Block -->
-      <div class="pt-3 border-t border-gray-800 space-y-2">
-        <span class="text-xs font-semibold text-gray-300 block">Add New Tag</span>
-        <div class="flex items-center gap-2">
-          <input type="color" id="newTagColor" value="#34d399" class="w-8 h-8 rounded bg-transparent border-0">
-          <input type="text" id="newTagName" placeholder="Category Name (e.g. Safehouse)" class="flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-          <button id="addNewTagBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition">+ Add Tag</button>
-        </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Ping Name / Description</label>
+        <input type="text" id="pingNameInput" placeholder="e.g., Crafting Bench, Meth Lab, Vault" 
+               class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
       </div>
 
-      <div class="flex justify-end gap-2 pt-2 border-t border-gray-800">
-        <button id="saveTagsBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition">
-          Save Changes
-        </button>
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Category</label>
+        <select id="pingCategorySelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 capitalize">
+          <!-- Populated dynamically without hex codes -->
+        </select>
+      </div>
+
+      <!-- Color Preview Box (Without raw hex string) -->
+      <div id="pingColorPreviewBox" class="flex items-center gap-2.5 bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60">
+        <span id="pingColorSwatch" class="w-4 h-4 rounded-full shadow border border-black/30"></span>
+        <span id="pingColorText" class="text-xs text-slate-300 font-semibold">Category Color</span>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="cancelPingBtn" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-medium transition">Cancel</button>
+        <button id="savePingBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-semibold text-white transition shadow-md">Place Ping</button>
       </div>
     </div>
   </div>
 
-  <script>
-    // -------------------------------------------------------------
-    // FIREBASE CONFIGURATION
-    // -------------------------------------------------------------
-    const firebaseConfig = {
-      apiKey: "AIzaSyCPtHTRVRmAyWe69FJehkiz8m2vgTKtjnM",
-      authDomain: "interactive-map-114ba.firebaseapp.com",
-      databaseURL: "https://interactive-map-114ba-default-rtdb.firebaseio.com",
-      projectId: "interactive-map-114ba",
-      storageBucket: "interactive-map-114ba.firebasestorage.app",
-      messagingSenderId: "376721672108",
-      appId: "1:376721672108:web:b0e0a4fe50d48226b6dc09",
-      measurementId: "G-YJ8WHZ4VMG"
-    };
+  <!-- Custom Category Creation Modal -->
+  <div id="categoryModal" class="fixed inset-0 z-[2000] hidden flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+        <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+          <i class="fa-solid fa-tag text-emerald-400"></i> Add Custom Category
+        </h3>
+        <button id="closeCategoryModal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
 
-    const DEFAULT_CATEGORIES = [
-      { id: 'cat_red', hex: "#ef4444", label: "Crafting" },
-      { id: 'cat_blue', hex: "#3b82f6", label: "Drugs" },
-      { id: 'cat_pink', hex: "#ec4899", label: "Petty Crime" },
-      { id: 'cat_yellow', hex: "#f59e0b", label: "Heists" }
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Category Tag Name</label>
+        <input type="text" id="catNameInput" placeholder="e.g. Police Stations, Gang Turf, Dealers" 
+               class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500">
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Associated Color</label>
+        <div class="flex items-center gap-3 bg-slate-900 p-2 rounded-xl border border-slate-700">
+          <input type="color" id="catColorInput" value="#10b981" class="h-8 w-12 bg-transparent cursor-pointer rounded border-0">
+          <span id="catColorHex" class="text-xs font-mono text-slate-400 uppercase">Selected Color</span>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="cancelCatBtn" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-medium transition">Cancel</button>
+        <button id="saveCatBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-semibold text-white transition shadow-md">Add Category</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // State Variables
+    let map;
+    let currentMode = 'ping'; // 'ping' or 'shade'
+    let selectedCategoryForShading = 'Crafting';
+    let tempLatlng = null;
+    let isDrawing = false;
+    let currentPolyline = null;
+    let currentPoints = [];
+
+    // Right-click panning state
+    let isRightClickPanning = false;
+    let rightClickStartPos = { x: 0, y: 0 };
+
+    // Default categories linked to specific colors
+    let categories = [
+      { id: 'Crafting', name: 'Crafting', color: '#3b82f6', visible: true },
+      { id: 'Drugs', name: 'Drugs', color: '#ef4444', visible: true },
+      { id: 'Heists', name: 'Heists/Crime', color: '#eab308', visible: true }
     ];
 
-    let categories = [...DEFAULT_CATEGORIES];
-    let activeColorFilters = {};
+    let pingsStore = [];
+    let shadingsStore = [];
+    let leafletMarkers = {};
+    let leafletShadings = {};
 
-    let pins = [];
-    let strokes = []; 
-    let activeMode = 'pin';
-
-    // Zoom and Pan Transformations
-    let currentZoom = 1;
-    let panX = 0;
-    let panY = 0;
-    const MIN_ZOOM = 1;
-    const MAX_ZOOM = 4;
-
-    let isPanning = false;
-    let startPanX = 0;
-    let startPanY = 0;
-
-    let pendingCoords = null;
-    let selectedColor = '#ef4444';
-    let selectedBrushColor = '#ef4444';
-    let brushOpacity = 0.35;
-    let brushSize = 25;
+    // Firebase Initialization
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'fivem-map-app';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 
     let db = null;
-    let pinsRef = null;
-    let strokesRef = null;
-    let categoriesRef = null;
+    let auth = null;
+    let pingsColRef, shadingsColRef, categoriesColRef;
 
-    const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
-
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    if (firebaseConfig) {
+      try {
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        pingsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'pings');
+        shadingsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'shadings');
+        categoriesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'categories');
+      } catch (err) {
+        console.warn("Firebase initialization skipped, using local fallback:", err);
+      }
     }
 
-    if (isFirebaseConfigured) {
-      firebase.initializeApp(firebaseConfig);
-      db = firebase.database();
-      pinsRef = db.ref('pins');
-      strokesRef = db.ref('strokes');
-      categoriesRef = db.ref('categories');
+    function saveLocalBackup() {
+      try {
+        localStorage.setItem('fivem_map_pings', JSON.stringify(pingsStore));
+        localStorage.setItem('fivem_map_shadings', JSON.stringify(shadingsStore));
+        localStorage.setItem('fivem_map_categories', JSON.stringify(categories));
+      } catch (e) {}
+    }
 
-      categoriesRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          categories = Object.values(data);
+    function loadLocalBackup() {
+      try {
+        const p = localStorage.getItem('fivem_map_pings');
+        const s = localStorage.getItem('fivem_map_shadings');
+        const c = localStorage.getItem('fivem_map_categories');
+
+        if (p) pingsStore = JSON.parse(p);
+        if (s) shadingsStore = JSON.parse(s);
+        if (c) {
+          const loadedCats = JSON.parse(c);
+          loadedCats.forEach(cat => {
+            if (!categories.some(existing => existing.name === cat.name)) {
+              categories.push(cat);
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    async function initAuth() {
+      if (!auth) return;
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          categoriesRef.set(DEFAULT_CATEGORIES);
+          await signInAnonymously(auth);
         }
-        initFilterState();
-        renderFilterPills();
-        renderPins();
-      });
-
-      pinsRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        pins = [];
-        if (data) {
-          Object.keys(data).forEach(key => {
-            pins.push({ id: key, ...data[key] });
-          });
-        }
-        renderPins();
-      });
-
-      strokesRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        strokes = [];
-        if (data) {
-          Object.keys(data).forEach(key => {
-            strokes.push({ id: key, ...data[key] });
-          });
-        }
-        redrawCanvas();
-      });
-
-    } else {
-      initFilterState();
-      renderFilterPills();
-    }
-
-    function initFilterState() {
-      categories.forEach(c => {
-        if (activeColorFilters[c.hex] === undefined) {
-          activeColorFilters[c.hex] = true;
-        }
-      });
-      if (categories.length > 0 && !selectedColor) {
-        selectedColor = categories[0].hex;
+      } catch (err) {
+        console.warn("Auth process fallback:", err);
       }
     }
 
-    const mapImage = document.getElementById('mapImage');
-    const zoomContainer = document.getElementById('zoomContainer');
-    const pinOverlay = document.getElementById('pinOverlay');
-    const paintCanvas = document.getElementById('paintCanvas');
-    const ctx = paintCanvas.getContext('2d');
-    const viewport = document.getElementById('viewport');
-
-    const namingModal = document.getElementById('namingModal');
-    const modalContainer = document.getElementById('modalContainer');
-    const pinForm = document.getElementById('pinForm');
-    const pinNameInput = document.getElementById('pinNameInput');
-    const pinNotesInput = document.getElementById('pinNotesInput');
-    const cancelPinBtn = document.getElementById('cancelPinBtn');
-    
-    const pinList = document.getElementById('pinList');
-    const emptyState = document.getElementById('emptyState');
-    const pinCount = document.getElementById('pinCount');
-    const strokeCount = document.getElementById('strokeCount');
-    const sidebarCount = document.getElementById('sidebarCount');
-    const zoomLevelDisplay = document.getElementById('zoomLevelDisplay');
-    const searchInput = document.getElementById('searchInput');
-
-    const modePinBtn = document.getElementById('modePinBtn');
-    const modeDrawBtn = document.getElementById('modeDrawBtn');
-    const modeEraseBtn = document.getElementById('modeEraseBtn');
-    const drawingToolbar = document.getElementById('drawingToolbar');
-
-    function updateTransform() {
-      // Lock panning when fully zoomed out
-      if (currentZoom === 1) {
-        panX = 0;
-        panY = 0;
-      }
-      zoomContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
-      zoomLevelDisplay.textContent = `${Math.round(currentZoom * 100)}%`;
+    if (auth) {
+      onAuthStateChanged(auth, (user) => {
+        const syncDot = document.getElementById('syncDot');
+        const syncText = document.getElementById('syncText');
+        if (user) {
+          syncDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+          syncText.innerText = "Live Synced";
+          setupRealtimeListeners();
+        } else {
+          syncDot.className = "w-2 h-2 rounded-full bg-amber-500";
+          syncText.innerText = "Connecting...";
+        }
+      });
     }
 
-    function setZoom(newZoom) {
-      currentZoom = Math.min(Math.max(newZoom, MIN_ZOOM), MAX_ZOOM);
-      updateTransform();
+    function initMap() {
+      loadLocalBackup();
+
+      const bounds = [[0, 0], [1000, 1000]];
+      const imageUrl = 'https://r2.fivemanage.com/5wGi5zx33QLzqLkxqL7ZI/Gemini_Generated_Image_8xr7wn8xr7wn8xr7.jpg';
+
+      map = L.map('map', {
+        crs: L.CRS.Simple,
+        minZoom: -2,
+        maxZoom: 3,
+        zoomSnap: 0.25,
+        attributionControl: false
+      });
+
+      L.imageOverlay(imageUrl, bounds).addTo(map);
+      map.fitBounds(bounds);
+
+      // Disable default right click context menu on map container
+      const mapContainer = document.getElementById('map');
+      mapContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // Setup Right-Click Drag-to-Pan (when zoomed in beyond initial minZoom)
+      mapContainer.addEventListener('mousedown', (e) => {
+        if (e.button === 2) { // Right mouse button
+          e.preventDefault();
+          if (map.getZoom() > map.getMinZoom()) {
+            isRightClickPanning = true;
+            rightClickStartPos = { x: e.clientX, y: e.clientY };
+            mapContainer.style.cursor = 'grab';
+          }
+        }
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (isRightClickPanning && map) {
+          const dx = e.clientX - rightClickStartPos.x;
+          const dy = e.clientY - rightClickStartPos.y;
+          rightClickStartPos = { x: e.clientX, y: e.clientY };
+          map.panBy([-dx, -dy], { animate: false });
+        }
+      });
+
+      window.addEventListener('mouseup', (e) => {
+        if (e.button === 2 && isRightClickPanning) {
+          isRightClickPanning = false;
+          mapContainer.style.cursor = 'crosshair';
+        }
+      });
+
+      map.on('click', handleMapClick);
+      map.on('mousedown', handleMouseDown);
+      map.on('mousemove', handleMouseMove);
+      map.on('mouseup', handleMouseUp);
+
+      renderCategoryLegend();
+      updatePingsOnMap();
+      updateShadingsOnMap();
     }
 
-    document.getElementById('zoomInBtn').addEventListener('click', () => setZoom(currentZoom + 0.3));
-    document.getElementById('zoomOutBtn').addEventListener('click', () => setZoom(currentZoom - 0.3));
-    document.getElementById('resetZoomBtn').addEventListener('click', () => {
-      setZoom(1);
+    const modePingBtn = document.getElementById('modePingBtn');
+    const modeShadeBtn = document.getElementById('modeShadeBtn');
+    const shadingControls = document.getElementById('shadingControls');
+
+    const brushSizeInput = document.getElementById('brushSizeInput');
+    const brushSizeVal = document.getElementById('brushSizeVal');
+    const shadeOpacityInput = document.getElementById('shadeOpacityInput');
+    const shadeOpacityVal = document.getElementById('shadeOpacityVal');
+    const shadeColorInput = document.getElementById('shadeColorInput');
+
+    brushSizeInput.addEventListener('input', (e) => {
+      brushSizeVal.innerText = e.target.value + 'px';
     });
 
-    viewport.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.2 : -0.2;
-      setZoom(currentZoom + delta);
-    }, { passive: false });
+    shadeOpacityInput.addEventListener('input', (e) => {
+      shadeOpacityVal.innerText = e.target.value + '%';
+    });
 
-    // Render Filter Bar & Color Picker with Labels
-    function renderFilterPills() {
-      const container = document.getElementById('colorFiltersContainer');
-      container.innerHTML = '';
+    modePingBtn.addEventListener('click', () => {
+      currentMode = 'ping';
+      modePingBtn.className = "mode-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow";
+      modeShadeBtn.className = "mode-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all";
+      shadingControls.classList.add('hidden');
+      map.dragging.enable();
+    });
 
-      categories.forEach(c => {
-        const isActive = activeColorFilters[c.hex] !== false;
+    modeShadeBtn.addEventListener('click', () => {
+      currentMode = 'shade';
+      modeShadeBtn.className = "mode-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow";
+      modePingBtn.className = "mode-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all";
+      shadingControls.classList.remove('hidden');
+      map.dragging.disable();
+    });
 
-        const pill = document.createElement('button');
-        pill.type = 'button';
-        pill.className = `flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold transition border border-gray-800 ${isActive ? 'bg-gray-800 text-gray-200' : 'filter-pill-inactive bg-gray-900 text-gray-500'}`;
-        pill.innerHTML = `<span class="w-2.5 h-2.5 rounded-full" style="background-color: ${c.hex}"></span><span>${escapeHtml(c.label)}</span>`;
-
-        pill.addEventListener('click', () => {
-          activeColorFilters[c.hex] = !activeColorFilters[c.hex];
-          renderFilterPills();
-          renderPins();
-        });
-
-        container.appendChild(pill);
-      });
+    function handleMapClick(e) {
+      if (currentMode === 'ping' && !isRightClickPanning) {
+        tempLatlng = e.latlng;
+        openPingModal();
+      }
     }
 
-    function renderModalColorPicker() {
-      const picker = document.getElementById('colorPicker');
-      picker.innerHTML = '';
+    function handleMouseDown(e) {
+      if (currentMode !== 'shade' || e.originalEvent.button !== 0) return; // Left mouse click only for shading
+      isDrawing = true;
+      currentPoints = [e.latlng];
 
-      categories.forEach(c => {
-        const isSelected = selectedColor === c.hex;
+      const strokeWidth = parseInt(brushSizeInput.value, 10);
+      const opacityVal = parseInt(shadeOpacityInput.value, 10) / 100;
+      const shadeColor = shadeColorInput.value;
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = `color-opt flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition ${isSelected ? 'border-white bg-gray-800 text-white scale-105' : 'border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700'}`;
-        btn.setAttribute('data-color', c.hex);
-        btn.innerHTML = `<span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${c.hex}"></span><span>${escapeHtml(c.label)}</span>`;
-
-        btn.addEventListener('click', () => {
-          selectedColor = c.hex;
-          renderModalColorPicker();
-        });
-
-        picker.appendChild(btn);
-      });
+      currentPolyline = L.polyline(currentPoints, {
+        color: shadeColor,
+        weight: strokeWidth,
+        opacity: opacityVal
+      }).addTo(map);
     }
 
-    // Tag Editor Modal Operations
-    const tagEditorModal = document.getElementById('tagEditorModal');
-    
-    function renderTagEditorList() {
-      const container = document.getElementById('tagInputsContainer');
+    function handleMouseMove(e) {
+      if (!isDrawing || currentMode !== 'shade') return;
+      currentPoints.push(e.latlng);
+      currentPolyline.setLatLngs(currentPoints);
+    }
+
+    function handleMouseUp() {
+      if (!isDrawing || currentMode !== 'shade') return;
+      isDrawing = false;
+
+      if (currentPoints.length > 2) {
+        const catObj = categories.find(c => c.name === selectedCategoryForShading) || categories[0];
+        const strokeWidth = parseInt(brushSizeInput.value, 10);
+        const opacityVal = parseInt(shadeOpacityInput.value, 10) / 100;
+        const shadeColor = shadeColorInput.value;
+
+        const rawPoints = currentPoints.map(pt => [pt.lat, pt.lng]);
+        const id = 'shade_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+        const newShading = {
+          id: id,
+          points: rawPoints,
+          category: catObj ? catObj.name : 'General',
+          color: shadeColor,
+          weight: strokeWidth,
+          opacity: opacityVal,
+          createdAt: Date.now()
+        };
+
+        if (db && auth?.currentUser) {
+          saveShadingToFirestore(newShading);
+        } else {
+          shadingsStore.push(newShading);
+          saveLocalBackup();
+          updateShadingsOnMap();
+        }
+      }
+
+      if (currentPolyline) {
+        map.removeLayer(currentPolyline);
+        currentPolyline = null;
+      }
+      currentPoints = [];
+    }
+
+    function renderCategoryLegend() {
+      const container = document.getElementById('categoryLegendBar');
       container.innerHTML = '';
 
-      categories.forEach((c, idx) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-center gap-2.5';
-        row.innerHTML = `
-          <input type="color" data-idx="${idx}" value="${c.hex}" class="cat-color-input w-6 h-6 rounded bg-transparent border-0">
-          <input type="text" data-idx="${idx}" value="${escapeHtml(c.label)}" class="cat-label-input flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-          <button type="button" data-idx="${idx}" class="remove-cat-btn text-gray-600 hover:text-red-400 p-1 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
+      const selectElem = document.getElementById('pingCategorySelect');
+      selectElem.innerHTML = '';
+
+      categories.forEach(cat => {
+        // Render Top Legend Button (Clean Name + Color Circle Only, No Hex Text)
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all shadow-md ${
+          cat.visible ? 'bg-slate-900/90 text-slate-100 border-slate-700' : 'bg-slate-950/60 text-slate-500 border-slate-800 opacity-50'
+        }`;
+
+        chip.innerHTML = `
+          <span class="w-3 h-3 rounded-full shadow-sm border border-black/20" style="background-color: ${cat.color}"></span>
+          <span>${cat.name}</span>
+          <i class="fa-solid ${cat.visible ? 'fa-eye' : 'fa-eye-slash'} text-[10px] ml-1 text-slate-400"></i>
         `;
-        container.appendChild(row);
-      });
 
-      document.querySelectorAll('.remove-cat-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
-          categories.splice(idx, 1);
-          renderTagEditorList();
+        chip.addEventListener('click', () => {
+          cat.visible = !cat.visible;
+          selectedCategoryForShading = cat.name;
+          shadeColorInput.value = cat.color;
+          renderCategoryLegend();
+          applyCategoryFilters();
         });
-      });
-    }
 
-    document.getElementById('editTagsBtn').addEventListener('click', () => {
-      renderTagEditorList();
-      tagEditorModal.classList.remove('opacity-0', 'pointer-events-none');
-    });
+        container.appendChild(chip);
 
-    document.getElementById('closeTagEditorBtn').addEventListener('click', () => {
-      tagEditorModal.classList.add('opacity-0', 'pointer-events-none');
-    });
-
-    document.getElementById('addNewTagBtn').addEventListener('click', () => {
-      const hex = document.getElementById('newTagColor').value;
-      const label = document.getElementById('newTagName').value.trim();
-      if (!label) return;
-
-      categories.push({ id: 'cat_' + Date.now(), hex, label });
-      activeColorFilters[hex] = true;
-      document.getElementById('newTagName').value = '';
-      renderTagEditorList();
-    });
-
-    document.getElementById('saveTagsBtn').addEventListener('click', () => {
-      document.querySelectorAll('.cat-label-input').forEach(input => {
-        const idx = parseInt(input.getAttribute('data-idx'));
-        const colorInput = document.querySelector(`.cat-color-input[data-idx="${idx}"]`);
-        if (categories[idx]) {
-          categories[idx].label = input.value.trim() || 'Unlabeled';
-          categories[idx].hex = colorInput.value;
-        }
+        // Populate Add Ping Dropdown Options
+        const option = document.createElement('option');
+        option.value = cat.name;
+        option.textContent = cat.name;
+        selectElem.appendChild(option);
       });
 
-      if (isFirebaseConfigured && categoriesRef) {
-        categoriesRef.set(categories);
-      }
-
-      initFilterState();
-      renderFilterPills();
-      renderModalColorPicker();
-      renderPins();
-      tagEditorModal.classList.add('opacity-0', 'pointer-events-none');
-    });
-
-    function resizeCanvas() {
-      paintCanvas.width = mapImage.clientWidth || mapImage.offsetWidth;
-      paintCanvas.height = mapImage.clientHeight || mapImage.offsetHeight;
-      redrawCanvas();
+      updatePingModalColorPreview();
     }
 
-    mapImage.addEventListener('load', resizeCanvas);
-    window.addEventListener('resize', resizeCanvas);
+    function updatePingModalColorPreview() {
+      const selectElem = document.getElementById('pingCategorySelect');
+      const selectedName = selectElem.value;
+      const catObj = categories.find(c => c.name === selectedName) || categories[0];
 
-    function setMode(mode) {
-      activeMode = mode;
-      [modePinBtn, modeDrawBtn, modeEraseBtn].forEach(b => b.classList.remove('mode-btn-active'));
-      
-      if (mode === 'pin') {
-        modePinBtn.classList.add('mode-btn-active');
-        drawingToolbar.classList.add('hidden');
-      } else if (mode === 'draw') {
-        modeDrawBtn.classList.add('mode-btn-active');
-        drawingToolbar.classList.remove('hidden');
-        document.getElementById('brushColorContainer').classList.remove('hidden');
-        document.getElementById('brushOpacityContainer').classList.remove('hidden');
-        document.getElementById('toolTipBanner').innerHTML = '<i class="fa-solid fa-paintbrush"></i> Left Click = Draw Shading | Middle Click Drag = Pan Map';
-      } else if (mode === 'erase') {
-        modeEraseBtn.classList.add('mode-btn-active');
-        drawingToolbar.classList.remove('hidden');
-        document.getElementById('brushColorContainer').classList.add('hidden');
-        document.getElementById('brushOpacityContainer').classList.add('hidden');
-        document.getElementById('toolTipBanner').innerHTML = '<i class="fa-solid fa-eraser"></i> Left Click = Erase | Middle Click Drag = Pan Map';
+      if (catObj) {
+        document.getElementById('pingColorSwatch').style.backgroundColor = catObj.color;
+        document.getElementById('pingColorText').innerText = catObj.name;
       }
     }
 
-    modePinBtn.addEventListener('click', () => setMode('pin'));
-    modeDrawBtn.addEventListener('click', () => setMode('draw'));
-    modeEraseBtn.addEventListener('click', () => setMode('erase'));
+    document.getElementById('pingCategorySelect').addEventListener('change', updatePingModalColorPreview);
 
-    let isDrawing = false;
-    let currentStroke = [];
+    function applyCategoryFilters() {
+      const activeCatNames = categories.filter(c => c.visible).map(c => c.name);
+      const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
 
-    function getCanvasCoords(e) {
-      const rect = paintCanvas.getBoundingClientRect();
-      return {
-        x: ((e.clientX - rect.left) / rect.width),
-        y: ((e.clientY - rect.top) / rect.height)
-      };
-    }
-
-    // Mouse Controls
-    paintCanvas.addEventListener('mousedown', (e) => {
-      // Middle Mouse Wheel Drag (button === 1) pans when zoomed in
-      if (e.button === 1) {
-        e.preventDefault();
-        if (currentZoom > 1) {
-          isPanning = true;
-          viewport.classList.add('panning');
-          startPanX = e.clientX - panX;
-          startPanY = e.clientY - panY;
-        }
-      } else if (e.button === 0) {
-        // Left Click: Action based on current mode
-        if (activeMode === 'pin') {
-          const rect = mapImage.getBoundingClientRect();
-          const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
-          const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
-
-          if (xPercent >= 0 && xPercent <= 100 && yPercent >= 0 && yPercent <= 100) {
-            pendingCoords = { x: xPercent, y: yPercent };
-            openModal();
-          }
-        } else if (activeMode === 'draw' || activeMode === 'erase') {
-          isDrawing = true;
-          currentStroke = [getCanvasCoords(e)];
-        }
-      }
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (isPanning) {
-        panX = e.clientX - startPanX;
-        panY = e.clientY - startPanY;
-        updateTransform();
-      } else if (isDrawing) {
-        const coords = getCanvasCoords(e);
-        currentStroke.push(coords);
-
-        drawSingleStroke({
-          points: currentStroke,
-          color: selectedBrushColor,
-          opacity: brushOpacity,
-          size: brushSize,
-          isEraser: activeMode === 'erase'
-        });
-      }
-    });
-
-    window.addEventListener('mouseup', (e) => {
-      if (isPanning) {
-        isPanning = false;
-        viewport.classList.remove('panning');
-      }
-      if (isDrawing) {
-        isDrawing = false;
-        if (currentStroke.length > 0) {
-          const strokeData = {
-            points: currentStroke,
-            color: selectedBrushColor,
-            opacity: brushOpacity,
-            size: brushSize,
-            isEraser: activeMode === 'erase'
-          };
-
-          if (isFirebaseConfigured && strokesRef) {
-            strokesRef.push(strokeData);
+      pingsStore.forEach(ping => {
+        const marker = leafletMarkers[ping.id];
+        if (marker) {
+          const isCatVisible = activeCatNames.includes(ping.category);
+          const matchesSearch = ping.name.toLowerCase().includes(searchVal) || ping.category.toLowerCase().includes(searchVal);
+          if (isCatVisible && matchesSearch) {
+            marker.addTo(map);
           } else {
-            strokes.push({ id: 'local_stroke_' + Date.now(), ...strokeData });
-            redrawCanvas();
+            map.removeLayer(marker);
           }
         }
-        currentStroke = [];
-      }
-    });
-
-    function drawSingleStroke(stroke) {
-      if (!stroke.points || stroke.points.length === 0) return;
-
-      const w = paintCanvas.width;
-      const h = paintCanvas.height;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = stroke.size;
-
-      if (stroke.isEraser) {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.strokeStyle = 'rgba(0,0,0,1)';
-      } else {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = stroke.opacity || 0.35;
-        ctx.strokeStyle = stroke.color;
-      }
-
-      const firstPoint = stroke.points[0];
-      ctx.moveTo(firstPoint.x * w, firstPoint.y * h);
-
-      for (let i = 1; i < stroke.points.length; i++) {
-        const pt = stroke.points[i];
-        ctx.lineTo(pt.x * w, pt.y * h);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function redrawCanvas() {
-      if (!paintCanvas.width || !paintCanvas.height) return;
-      ctx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-      strokes.forEach(stroke => drawSingleStroke(stroke));
-      strokeCount.textContent = strokes.length;
-    }
-
-    document.querySelectorAll('.brush-color-opt').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.brush-color-opt').forEach(b => b.classList.remove('ring-2', 'ring-white/90', 'scale-110'));
-        btn.classList.add('ring-2', 'ring-white/90', 'scale-110');
-        selectedBrushColor = btn.getAttribute('data-color');
       });
-    });
 
-    document.getElementById('brushOpacity').addEventListener('input', (e) => {
-      brushOpacity = parseFloat(e.target.value);
-      document.getElementById('opacityDisplay').textContent = `${Math.round(brushOpacity * 100)}%`;
-    });
-
-    document.getElementById('brushSize').addEventListener('input', (e) => {
-      brushSize = parseInt(e.target.value);
-      document.getElementById('brushSizeDisplay').textContent = `${brushSize}px`;
-    });
-
-    function openModal() {
-      pinNameInput.value = '';
-      pinNotesInput.value = '';
-      renderModalColorPicker();
-      namingModal.classList.remove('opacity-0', 'pointer-events-none');
-      modalContainer.classList.remove('scale-95');
-      modalContainer.classList.add('scale-100');
-      setTimeout(() => pinNameInput.focus(), 100);
+      shadingsStore.forEach(shading => {
+        const poly = leafletShadings[shading.id];
+        if (poly) {
+          const isCatVisible = activeCatNames.includes(shading.category);
+          const matchesSearch = shading.category.toLowerCase().includes(searchVal);
+          if (isCatVisible && matchesSearch) {
+            poly.addTo(map);
+          } else {
+            map.removeLayer(poly);
+          }
+        }
+      });
     }
 
-    function closeModal() {
-      namingModal.classList.add('opacity-0', 'pointer-events-none');
-      modalContainer.classList.remove('scale-100');
-      modalContainer.classList.add('scale-95');
-      pendingCoords = null;
+    document.getElementById('searchInput').addEventListener('input', applyCategoryFilters);
+
+    function setupRealtimeListeners() {
+      if (!auth || !auth.currentUser) return;
+
+      onSnapshot(pingsColRef, (snapshot) => {
+        pingsStore = [];
+        snapshot.forEach(docSnap => pingsStore.push(docSnap.data()));
+        saveLocalBackup();
+        updatePingsOnMap();
+      }, (err) => console.error("Pings listener error:", err));
+
+      onSnapshot(shadingsColRef, (snapshot) => {
+        shadingsStore = [];
+        snapshot.forEach(docSnap => shadingsStore.push(docSnap.data()));
+        saveLocalBackup();
+        updateShadingsOnMap();
+      }, (err) => console.error("Shadings listener error:", err));
+
+      onSnapshot(categoriesColRef, (snapshot) => {
+        snapshot.forEach(docSnap => {
+          const newCat = docSnap.data();
+          const existingIdx = categories.findIndex(c => c.name === newCat.name);
+          if (existingIdx >= 0) {
+            categories[existingIdx].color = newCat.color;
+          } else {
+            categories.push({ ...newCat, visible: true });
+          }
+        });
+        saveLocalBackup();
+        renderCategoryLegend();
+        updatePingsOnMap();
+      }, (err) => console.error("Categories listener error:", err));
     }
 
-    cancelPinBtn.addEventListener('click', closeModal);
+    function createColorMarkerIcon(colorHex) {
+      const svgIcon = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="30" height="40">
+          <path fill="${colorHex}" stroke="#0f172a" stroke-width="25" d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0z"/>
+          <circle cx="192" cy="192" r="70" fill="#ffffff" />
+          <circle cx="192" cy="192" r="45" fill="${colorHex}" />
+        </svg>
+      `;
 
-    pinForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const name = pinNameInput.value.trim();
-      if (!name || !pendingCoords) return;
+      return L.divIcon({
+        className: 'ping-marker-active',
+        html: svgIcon,
+        iconSize: [30, 40],
+        iconAnchor: [15, 40],
+        popupAnchor: [0, -36]
+      });
+    }
 
-      const newPin = {
+    function updatePingsOnMap() {
+      const activeIds = pingsStore.map(p => p.id);
+      Object.keys(leafletMarkers).forEach(id => {
+        if (!activeIds.includes(id)) {
+          map.removeLayer(leafletMarkers[id]);
+          delete leafletMarkers[id];
+        }
+      });
+
+      pingsStore.forEach(ping => {
+        const catObj = categories.find(c => c.name === ping.category) || { color: '#3b82f6', name: ping.category };
+        const iconColor = ping.color || catObj.color;
+
+        if (!leafletMarkers[ping.id]) {
+          const markerIcon = createColorMarkerIcon(iconColor);
+          const marker = L.marker([ping.lat, ping.lng], { icon: markerIcon });
+
+          const timeString = ping.createdAt ? new Date(ping.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+          const popupContent = document.createElement('div');
+          popupContent.className = 'space-y-2 p-0.5';
+          popupContent.innerHTML = `
+            <div class="flex items-center gap-2 border-b border-slate-700/80 pb-2">
+              <span class="w-3.5 h-3.5 rounded-full shadow border border-slate-900" style="background-color: ${iconColor}"></span>
+              <span class="text-xs font-bold text-slate-100 tracking-wide">${ping.name}</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-slate-400">
+              <span>Category: <strong class="text-slate-200">${ping.category}</strong></span>
+              <span>${timeString}</span>
+            </div>
+            <button class="delete-ping-btn w-full mt-2 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-900/70 border border-red-700/60 rounded-xl text-[11px] text-red-300 font-semibold transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-trash-can text-[10px]"></i> Delete Marker
+            </button>
+          `;
+
+          popupContent.querySelector('.delete-ping-btn').addEventListener('click', () => {
+            deletePing(ping.id);
+          });
+
+          marker.bindPopup(popupContent);
+          leafletMarkers[ping.id] = marker;
+        } else {
+          leafletMarkers[ping.id].setIcon(createColorMarkerIcon(iconColor));
+        }
+      });
+
+      applyCategoryFilters();
+    }
+
+    function updateShadingsOnMap() {
+      const activeIds = shadingsStore.map(s => s.id);
+      Object.keys(leafletShadings).forEach(id => {
+        if (!activeIds.includes(id)) {
+          map.removeLayer(leafletShadings[id]);
+          delete leafletShadings[id];
+        }
+      });
+
+      shadingsStore.forEach(shading => {
+        if (!leafletShadings[shading.id]) {
+          const opacityVal = shading.opacity !== undefined ? shading.opacity : 0.38;
+          const weightVal = shading.weight !== undefined ? shading.weight : 3;
+
+          const polygon = L.polygon(shading.points, {
+            color: shading.color,
+            fillColor: shading.color,
+            fillOpacity: opacityVal,
+            weight: weightVal
+          });
+
+          const popupContent = document.createElement('div');
+          popupContent.className = 'space-y-2 p-0.5';
+          popupContent.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full" style="background-color: ${shading.color}"></span>
+              <span class="text-xs font-bold text-slate-100">Shaded Area (${shading.category})</span>
+            </div>
+            <button class="delete-shade-btn w-full mt-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-900/70 border border-red-700/60 rounded-xl text-[11px] text-red-300 font-semibold transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-trash-can text-[10px]"></i> Delete Shading
+            </button>
+          `;
+
+          popupContent.querySelector('.delete-shade-btn').addEventListener('click', () => {
+            deleteShading(shading.id);
+          });
+
+          polygon.bindPopup(popupContent);
+          leafletShadings[shading.id] = polygon;
+        }
+      });
+
+      applyCategoryFilters();
+    }
+
+    async function savePingToFirestore(ping) {
+      if (!auth?.currentUser) return;
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pings', ping.id), ping);
+      } catch (err) {
+        console.error("Error saving ping:", err);
+      }
+    }
+
+    async function deletePing(id) {
+      if (db && auth?.currentUser) {
+        try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pings', id));
+        } catch (err) {}
+      } else {
+        pingsStore = pingsStore.filter(p => p.id !== id);
+        saveLocalBackup();
+        updatePingsOnMap();
+      }
+    }
+
+    async function saveShadingToFirestore(shading) {
+      if (!auth?.currentUser) return;
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shadings', shading.id), shading);
+      } catch (err) {
+        console.error("Error saving shading:", err);
+      }
+    }
+
+    async function deleteShading(id) {
+      if (db && auth?.currentUser) {
+        try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shadings', id));
+        } catch (err) {}
+      } else {
+        shadingsStore = shadingsStore.filter(s => s.id !== id);
+        saveLocalBackup();
+        updateShadingsOnMap();
+      }
+    }
+
+    async function saveCategoryToFirestore(cat) {
+      if (!auth?.currentUser) return;
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'categories', cat.name), cat);
+      } catch (err) {
+        console.error("Error saving category:", err);
+      }
+    }
+
+    // Modal Events
+    const pingModal = document.getElementById('pingModal');
+    const categoryModal = document.getElementById('categoryModal');
+
+    function openPingModal() {
+      document.getElementById('pingNameInput').value = '';
+      updatePingModalColorPreview();
+      pingModal.classList.remove('hidden');
+    }
+
+    function closePingModal() {
+      pingModal.classList.add('hidden');
+      tempLatlng = null;
+    }
+
+    document.getElementById('closePingModal').addEventListener('click', closePingModal);
+    document.getElementById('cancelPingBtn').addEventListener('click', closePingModal);
+
+    document.getElementById('savePingBtn').addEventListener('click', () => {
+      const name = document.getElementById('pingNameInput').value.trim();
+      const category = document.getElementById('pingCategorySelect').value;
+
+      if (!name || !tempLatlng) return;
+
+      const catObj = categories.find(c => c.name === category) || { color: '#3b82f6' };
+
+      const newPing = {
+        id: 'ping_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
         name: name,
-        notes: pinNotesInput.value.trim(),
-        x: pendingCoords.x,
-        y: pendingCoords.y,
-        color: selectedColor,
-        createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        category: category,
+        color: catObj.color,
+        lat: tempLatlng.lat,
+        lng: tempLatlng.lng,
+        createdAt: Date.now()
       };
 
-      if (isFirebaseConfigured && pinsRef) {
-        pinsRef.push(newPin);
+      if (db && auth?.currentUser) {
+        savePingToFirestore(newPing);
       } else {
-        pins.push({ id: 'local_' + Date.now(), ...newPin });
-        renderPins();
+        pingsStore.push(newPing);
+        saveLocalBackup();
+        updatePingsOnMap();
       }
 
-      closeModal();
+      closePingModal();
     });
 
-    function getTagLabel(colorHex) {
-      const match = categories.find(c => c.hex.toLowerCase() === colorHex.toLowerCase());
-      return match ? match.label : "Pin";
+    document.getElementById('openCategoryModalBtn').addEventListener('click', () => {
+      document.getElementById('catNameInput').value = '';
+      categoryModal.classList.remove('hidden');
+    });
+
+    function closeCategoryModal() {
+      categoryModal.classList.add('hidden');
     }
 
-    function renderPins() {
-      pinOverlay.innerHTML = '';
-      
-      const filter = searchInput.value.toLowerCase().trim();
-      
-      const filteredPins = pins.filter(p => {
-        const matchesColor = activeColorFilters[p.color] !== false;
-        const matchesText = p.name.toLowerCase().includes(filter) || (p.notes && p.notes.toLowerCase().includes(filter));
-        return matchesColor && matchesText;
-      });
+    document.getElementById('closeCategoryModal').addEventListener('click', closeCategoryModal);
+    document.getElementById('cancelCatBtn').addEventListener('click', closeCategoryModal);
 
-      pinCount.textContent = pins.length;
-      sidebarCount.textContent = filteredPins.length;
+    const catColorInput = document.getElementById('catColorInput');
+    const catColorHex = document.getElementById('catColorHex');
+    catColorInput.addEventListener('input', (e) => {
+      catColorHex.style.color = e.target.value;
+    });
 
-      if (filteredPins.length === 0) {
-        pinList.innerHTML = '';
-        pinList.appendChild(emptyState);
+    document.getElementById('saveCatBtn').addEventListener('click', () => {
+      const name = document.getElementById('catNameInput').value.trim();
+      const color = catColorInput.value;
+
+      if (!name) return;
+
+      const newCat = { name: name, color: color };
+      const existingIdx = categories.findIndex(c => c.name === name);
+
+      if (existingIdx >= 0) {
+        categories[existingIdx].color = color;
       } else {
-        pinList.innerHTML = '';
+        categories.push({ ...newCat, visible: true });
       }
 
-      filteredPins.forEach((pin) => {
-        const tagLabel = getTagLabel(pin.color);
-        const marker = document.createElement('div');
-        marker.className = 'map-marker absolute group pointer-events-auto';
-        marker.style.left = `${pin.x}%`;
-        marker.style.top = `${pin.y}%`;
-        marker.style.transform = 'translate(-50%, -100%)';
+      renderCategoryLegend();
 
-        marker.innerHTML = `
-          <div class="relative flex flex-col items-center">
-            <div class="pin-tooltip absolute bottom-full mb-2 bg-gray-900/95 text-white text-xs py-1.5 px-3 rounded-lg shadow-xl border border-gray-700 whitespace-nowrap z-30">
-              <p class="font-bold text-white flex items-center gap-1.5">
-                <span>${escapeHtml(pin.name)}</span>
-                <span class="text-[9px] px-1.5 py-0.2 rounded font-normal bg-gray-800 text-gray-300 border border-gray-700">${escapeHtml(tagLabel)}</span>
-              </p>
-              ${pin.notes ? `<p class="text-[10px] text-gray-400 mt-0.5">${escapeHtml(pin.notes)}</p>` : ''}
-              <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-            </div>
-
-            <div class="w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white/90 text-white text-xs transform origin-bottom" style="background-color: ${pin.color}">
-              <i class="fa-solid fa-location-dot"></i>
-            </div>
-            <div class="w-1.5 h-1.5 rounded-full bg-black/40 mt-0.5 blur-[1px]"></div>
-          </div>
-        `;
-
-        pinOverlay.appendChild(marker);
-      });
-
-      filteredPins.forEach((pin) => {
-        const tagLabel = getTagLabel(pin.color);
-        const item = document.createElement('div');
-        item.className = 'bg-gray-950/80 hover:bg-gray-800/80 border border-gray-800/80 rounded-xl p-3 transition flex items-center justify-between group cursor-default';
-        item.innerHTML = `
-          <div class="flex items-center gap-3 overflow-hidden">
-            <div class="w-3 h-3 rounded-full shrink-0" style="background-color: ${pin.color}"></div>
-            <div class="truncate">
-              <h4 class="text-xs font-semibold text-gray-200 group-hover:text-indigo-400 transition truncate flex items-center gap-1.5">
-                <span>${escapeHtml(pin.name)}</span>
-                <span class="text-[9px] px-1.5 rounded bg-gray-900 text-gray-400 border border-gray-800 font-normal">${escapeHtml(tagLabel)}</span>
-              </h4>
-              <p class="text-[10px] text-gray-500 truncate">${pin.notes ? escapeHtml(pin.notes) : 'X: ' + pin.x.toFixed(1) + '% | Y: ' + pin.y.toFixed(1) + '%'}</p>
-            </div>
-          </div>
-          <button data-id="${pin.id}" class="delete-pin-btn text-gray-600 hover:text-red-400 p-1.5 rounded transition opacity-0 group-hover:opacity-100">
-            <i class="fa-solid fa-trash-can text-xs"></i>
-          </button>
-        `;
-
-        item.addEventListener('click', (e) => {
-          if (e.target.closest('.delete-pin-btn')) return;
-          const imgRect = mapImage.getBoundingClientRect();
-          const vpRect = viewport.getBoundingClientRect();
-          
-          currentZoom = 2;
-          panX = (vpRect.width / 2) - ((pin.x / 100) * imgRect.width * currentZoom);
-          panY = (vpRect.height / 2) - ((pin.y / 100) * imgRect.height * currentZoom);
-          updateTransform();
-        });
-
-        pinList.appendChild(item);
-      });
-
-      document.querySelectorAll('.delete-pin-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const id = btn.getAttribute('data-id');
-
-          if (isFirebaseConfigured && pinsRef) {
-            pinsRef.child(id).remove();
-          } else {
-            pins = pins.filter(p => p.id !== id);
-            renderPins();
-          }
-        });
-      });
-    }
-
-    searchInput.addEventListener('input', renderPins);
-
-    document.getElementById('clearDrawingsBtn').addEventListener('click', () => {
-      if (confirm("Clear all shaded drawing strokes?")) {
-        if (isFirebaseConfigured && strokesRef) {
-          strokesRef.remove();
-        } else {
-          strokes = [];
-          redrawCanvas();
-        }
+      if (db && auth?.currentUser) {
+        saveCategoryToFirestore(newCat);
+      } else {
+        saveLocalBackup();
       }
+
+      closeCategoryModal();
     });
 
     document.getElementById('clearAllBtn').addEventListener('click', () => {
-      if (confirm("Clear ALL pins and drawings from the map?")) {
-        if (isFirebaseConfigured && db) {
-          db.ref().remove();
-        } else {
-          pins = [];
-          strokes = [];
-          renderPins();
-          redrawCanvas();
-        }
-      }
+      pingsStore.forEach(ping => deletePing(ping.id));
+      shadingsStore.forEach(shading => deleteShading(shading.id));
     });
 
-    document.getElementById('exportBtn').addEventListener('click', () => {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ pins, strokes, categories }, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", "map_tactical_data.json");
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    });
+    window.onload = async () => {
+      await initAuth();
+      initMap();
+    };
   </script>
 </body>
 </html>
