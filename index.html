@@ -12,20 +12,18 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
   <style>
-    body {
+    * {
       cursor: default !important;
+    }
+    body {
       user-select: none;
     }
     .map-viewport {
       overflow: hidden;
       touch-action: none;
     }
-    .map-viewport.panning, .map-viewport.panning * {
-      cursor: grabbing !important;
-    }
     .map-marker {
       transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      cursor: default !important;
     }
     .map-marker:hover {
       transform: translate(-50%, -100%) scale(1.25);
@@ -148,14 +146,14 @@
       <!-- Opacity Slider -->
       <div id="brushOpacityContainer" class="flex items-center gap-2">
         <span class="text-gray-400 font-semibold uppercase tracking-wider text-[10px]">Transparency:</span>
-        <input type="range" id="brushOpacity" min="0.05" max="0.9" step="0.05" value="0.35" class="w-24 accent-indigo-500 cursor-pointer">
+        <input type="range" id="brushOpacity" min="0.05" max="0.9" step="0.05" value="0.35" class="w-24 accent-indigo-500">
         <span id="opacityDisplay" class="font-mono text-gray-300 min-w-[32px]">35%</span>
       </div>
 
       <!-- Brush Size Slider -->
       <div class="flex items-center gap-2">
         <span class="text-gray-400 font-semibold uppercase tracking-wider text-[10px]">Brush Size:</span>
-        <input type="range" id="brushSize" min="5" max="80" step="5" value="25" class="w-24 accent-indigo-500 cursor-pointer">
+        <input type="range" id="brushSize" min="5" max="80" step="5" value="25" class="w-24 accent-indigo-500">
         <span id="brushSizeDisplay" class="font-mono text-gray-300 min-w-[28px]">25px</span>
       </div>
     </div>
@@ -314,7 +312,7 @@
       <div class="pt-3 border-t border-gray-800 space-y-2">
         <span class="text-xs font-semibold text-gray-300 block">Add New Tag</span>
         <div class="flex items-center gap-2">
-          <input type="color" id="newTagColor" value="#34d399" class="w-8 h-8 rounded bg-transparent border-0 cursor-pointer">
+          <input type="color" id="newTagColor" value="#34d399" class="w-8 h-8 rounded bg-transparent border-0">
           <input type="text" id="newTagName" placeholder="Category Name (e.g. Safehouse)" class="flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
           <button id="addNewTagBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition">+ Add Tag</button>
         </div>
@@ -553,7 +551,7 @@
         const row = document.createElement('div');
         row.className = 'flex items-center gap-2.5';
         row.innerHTML = `
-          <input type="color" data-idx="${idx}" value="${c.hex}" class="cat-color-input w-6 h-6 rounded bg-transparent border-0 cursor-pointer">
+          <input type="color" data-idx="${idx}" value="${c.hex}" class="cat-color-input w-6 h-6 rounded bg-transparent border-0">
           <input type="text" data-idx="${idx}" value="${escapeHtml(c.label)}" class="cat-label-input flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
           <button type="button" data-idx="${idx}" class="remove-cat-btn text-gray-600 hover:text-red-400 p-1 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
         `;
