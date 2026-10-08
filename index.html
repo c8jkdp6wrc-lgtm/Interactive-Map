@@ -17,7 +17,6 @@
       user-select: none;
     }
     .map-viewport {
-      cursor: grab;
       overflow: hidden;
       touch-action: none;
     }
@@ -84,7 +83,7 @@
     <!-- Mode Toggle Toolbar -->
     <div class="flex items-center bg-gray-950 border border-gray-800 p-1 rounded-xl gap-1">
       <button id="modePinBtn" class="mode-btn-active px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-400 border border-transparent transition">
-        <i class="fa-solid fa-location-dot"></i> Pin / Pan Mode
+        <i class="fa-solid fa-location-dot"></i> Pin Mode
       </button>
       <button id="modeDrawBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-400 border border-transparent transition">
         <i class="fa-solid fa-paint-brush"></i> Shade / Paint
@@ -162,7 +161,7 @@
     </div>
 
     <div id="toolTipBanner" class="text-xs text-indigo-300 bg-indigo-950/60 border border-indigo-800/40 px-3 py-1 rounded-lg flex items-center gap-2">
-      <i class="fa-solid fa-paintbrush"></i> Click and drag on the map to shade areas (Hold Middle Mouse Button to pan)
+      <i class="fa-solid fa-paintbrush"></i> Left Click = Draw Shading | Middle Click Drag = Pan Map
     </div>
   </div>
 
@@ -368,7 +367,6 @@
     let isPanning = false;
     let startPanX = 0;
     let startPanY = 0;
-    let totalPanDistance = 0;
 
     let pendingCoords = null;
     let selectedColor = '#ef4444';
@@ -473,24 +471,23 @@
     const drawingToolbar = document.getElementById('drawingToolbar');
 
     function updateTransform() {
+      // Lock panning when fully zoomed out
+      if (currentZoom === 1) {
+        panX = 0;
+        panY = 0;
+      }
       zoomContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
       zoomLevelDisplay.textContent = `${Math.round(currentZoom * 100)}%`;
     }
 
     function setZoom(newZoom) {
       currentZoom = Math.min(Math.max(newZoom, MIN_ZOOM), MAX_ZOOM);
-      if (currentZoom === 1) {
-        panX = 0;
-        panY = 0;
-      }
       updateTransform();
     }
 
     document.getElementById('zoomInBtn').addEventListener('click', () => setZoom(currentZoom + 0.3));
     document.getElementById('zoomOutBtn').addEventListener('click', () => setZoom(currentZoom - 0.3));
     document.getElementById('resetZoomBtn').addEventListener('click', () => {
-      panX = 0;
-      panY = 0;
       setZoom(1);
     });
 
@@ -634,13 +631,13 @@
         drawingToolbar.classList.remove('hidden');
         document.getElementById('brushColorContainer').classList.remove('hidden');
         document.getElementById('brushOpacityContainer').classList.remove('hidden');
-        document.getElementById('toolTipBanner').innerHTML = '<i class="fa-solid fa-paintbrush"></i> Click and drag on the map to shade areas (Hold Middle Mouse Button to pan)';
+        document.getElementById('toolTipBanner').innerHTML = '<i class="fa-solid fa-paintbrush"></i> Left Click = Draw Shading | Middle Click Drag = Pan Map';
       } else if (mode === 'erase') {
         modeEraseBtn.classList.add('mode-btn-active');
         drawingToolbar.classList.remove('hidden');
         document.getElementById('brushColorContainer').classList.add('hidden');
         document.getElementById('brushOpacityContainer').classList.add('hidden');
-        document.getElementById('toolTipBanner').innerHTML = '<i class="fa-solid fa-eraser"></i> Click and drag over drawings to erase (Hold Middle Mouse Button to pan)';
+        document.getElementById('toolTipBanner').innerHTML = '<i class="fa-solid fa-eraser"></i> Left Click = Erase | Middle Click Drag = Pan Map';
       }
     }
 
@@ -659,29 +656,39 @@
       };
     }
 
-    // Mouse & Drag Operations
+    // Mouse Controls
     paintCanvas.addEventListener('mousedown', (e) => {
-      // Middle Mouse Button (button === 1) ALWAYS enables panning across all modes
-      if (e.button === 1 || (e.button === 0 && activeMode === 'pin')) {
-        if (e.button === 1) e.preventDefault(); // Prevent middle-click scroll icon
-        isPanning = true;
-        viewport.classList.add('panning');
-        startPanX = e.clientX - panX;
-        startPanY = e.clientY - panY;
-        totalPanDistance = 0;
-      } else if (e.button === 0 && (activeMode === 'draw' || activeMode === 'erase')) {
-        isDrawing = true;
-        currentStroke = [getCanvasCoords(e)];
+      // Middle Mouse Wheel Drag (button === 1) pans when zoomed in
+      if (e.button === 1) {
+        e.preventDefault();
+        if (currentZoom > 1) {
+          isPanning = true;
+          viewport.classList.add('panning');
+          startPanX = e.clientX - panX;
+          startPanY = e.clientY - panY;
+        }
+      } else if (e.button === 0) {
+        // Left Click: Action based on current mode
+        if (activeMode === 'pin') {
+          const rect = mapImage.getBoundingClientRect();
+          const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+          const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+
+          if (xPercent >= 0 && xPercent <= 100 && yPercent >= 0 && yPercent <= 100) {
+            pendingCoords = { x: xPercent, y: yPercent };
+            openModal();
+          }
+        } else if (activeMode === 'draw' || activeMode === 'erase') {
+          isDrawing = true;
+          currentStroke = [getCanvasCoords(e)];
+        }
       }
     });
 
     window.addEventListener('mousemove', (e) => {
       if (isPanning) {
-        const newPanX = e.clientX - startPanX;
-        const newPanY = e.clientY - startPanY;
-        totalPanDistance += Math.hypot(newPanX - panX, newPanY - panY);
-        panX = newPanX;
-        panY = newPanY;
+        panX = e.clientX - startPanX;
+        panY = e.clientY - startPanY;
         updateTransform();
       } else if (isDrawing) {
         const coords = getCanvasCoords(e);
@@ -721,20 +728,6 @@
           }
         }
         currentStroke = [];
-      }
-    });
-
-    paintCanvas.addEventListener('click', (e) => {
-      // Drop pin only if in Pin Mode and user didn't drag to pan
-      if (activeMode === 'pin' && totalPanDistance < 5 && e.button === 0) {
-        const rect = mapImage.getBoundingClientRect();
-        const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
-        const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
-
-        if (xPercent >= 0 && xPercent <= 100 && yPercent >= 0 && yPercent <= 100) {
-          pendingCoords = { x: xPercent, y: yPercent };
-          openModal();
-        }
       }
     });
 
