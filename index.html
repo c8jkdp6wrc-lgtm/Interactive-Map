@@ -209,9 +209,9 @@
       <!-- Color Category Filter Bar -->
       <div class="p-3 border-b border-gray-800 bg-gray-950/40 space-y-2">
         <div class="flex items-center justify-between text-[11px]">
-          <span class="text-gray-400 font-semibold uppercase tracking-wider">Filter Color Tags</span>
+          <span class="text-gray-400 font-semibold uppercase tracking-wider">Filter Category Tags</span>
           <button id="editTagsBtn" class="text-indigo-400 hover:text-indigo-300 font-medium text-[10px] flex items-center gap-1 transition">
-            <i class="fa-solid fa-pen"></i> Edit Tags
+            <i class="fa-solid fa-gear"></i> + New Tag / Edit
           </button>
         </div>
         <div id="colorFiltersContainer" class="flex items-center gap-1.5 flex-wrap">
@@ -252,7 +252,7 @@
           </div>
           <div>
             <h3 class="font-bold text-white text-base">Name Your Location</h3>
-            <p class="text-xs text-gray-400">Pin name disappears after creation and only shows on hover</p>
+            <p class="text-xs text-gray-400">Select a category tag to color and identify your pin</p>
           </div>
         </div>
       </div>
@@ -267,7 +267,7 @@
 
         <div>
           <label class="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
-            Marker Color & Tag
+            Category Tag & Color
           </label>
           <div class="flex items-center gap-2 flex-wrap" id="colorPicker">
             <!-- Rendered dynamically -->
@@ -293,24 +293,34 @@
     </div>
   </div>
 
-  <!-- Tag Label Editor Modal -->
+  <!-- Tag Label & Color Manager Modal -->
   <div id="tagEditorModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 opacity-0 pointer-events-none transition-opacity duration-200">
-    <div class="bg-gray-900 border border-gray-700 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
+    <div class="bg-gray-900 border border-gray-700 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between">
         <h3 class="font-bold text-white text-base flex items-center gap-2">
-          <i class="fa-solid fa-tags text-indigo-400"></i> Customize Color Tag Labels
+          <i class="fa-solid fa-tags text-indigo-400"></i> Manage Categories & Colors
         </h3>
         <button id="closeTagEditorBtn" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
-      <p class="text-xs text-gray-400">Assign category names to colors to organize location pins on the map.</p>
+      <p class="text-xs text-gray-400">Customize labels or add new color categories for all users.</p>
 
       <div id="tagInputsContainer" class="space-y-2.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
         <!-- Input fields injected dynamically -->
       </div>
 
+      <!-- Add New Category Block -->
+      <div class="pt-3 border-t border-gray-800 space-y-2">
+        <span class="text-xs font-semibold text-gray-300 block">Add New Tag</span>
+        <div class="flex items-center gap-2">
+          <input type="color" id="newTagColor" value="#34d399" class="w-8 h-8 rounded bg-transparent border-0 cursor-pointer">
+          <input type="text" id="newTagName" placeholder="Category Name (e.g. Safehouse)" class="flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          <button id="addNewTagBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition">+ Add Tag</button>
+        </div>
+      </div>
+
       <div class="flex justify-end gap-2 pt-2 border-t border-gray-800">
         <button id="saveTagsBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition">
-          Save Tag Names
+          Save Changes
         </button>
       </div>
     </div>
@@ -331,35 +341,16 @@
       measurementId: "G-YJ8WHZ4VMG"
     };
 
-    // Default Color Tag definitions
-    const COLOR_DEFS = [
-      { hex: "#ef4444", defaultLabel: "Red" },
-      { hex: "#3b82f6", defaultLabel: "Blue" },
-      { hex: "#10b981", defaultLabel: "Green" },
-      { hex: "#f59e0b", defaultLabel: "Yellow" },
-      { hex: "#8b5cf6", defaultLabel: "Purple" },
-      { hex: "#ec4899", defaultLabel: "Pink" }
+    // Default Categories requested
+    const DEFAULT_CATEGORIES = [
+      { id: 'cat_red', hex: "#ef4444", label: "Crafting" },
+      { id: 'cat_blue', hex: "#3b82f6", label: "Drugs" },
+      { id: 'cat_pink', hex: "#ec4899", label: "Petty Crime" },
+      { id: 'cat_yellow', hex: "#f59e0b", label: "Heists" }
     ];
 
-    // Load custom tag names from LocalStorage or fall back to defaults
-    let colorTagMap = JSON.parse(localStorage.getItem('map_color_tags')) || {
-      "#ef4444": "Red",
-      "#3b82f6": "Blue",
-      "#10b981": "Green",
-      "#f59e0b": "Yellow",
-      "#8b5cf6": "Purple",
-      "#ec4899": "Pink"
-    };
-
-    // Filter state tracking: Hex code -> boolean
-    let activeColorFilters = {
-      "#ef4444": true,
-      "#3b82f6": true,
-      "#10b981": true,
-      "#f59e0b": true,
-      "#8b5cf6": true,
-      "#ec4899": true
-    };
+    let categories = [...DEFAULT_CATEGORIES];
+    let activeColorFilters = {};
 
     let pins = [];
     let strokes = []; 
@@ -377,6 +368,7 @@
     let db = null;
     let pinsRef = null;
     let strokesRef = null;
+    let categoriesRef = null;
 
     const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
 
@@ -390,6 +382,21 @@
       db = firebase.database();
       pinsRef = db.ref('pins');
       strokesRef = db.ref('strokes');
+      categoriesRef = db.ref('categories');
+
+      // Real-time listener for Categories
+      categoriesRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          categories = Object.values(data);
+        } else {
+          // Initialize defaults in DB if empty
+          categoriesRef.set(DEFAULT_CATEGORIES);
+        }
+        initFilterState();
+        renderFilterPills();
+        renderPins();
+      });
 
       pinsRef.on('value', (snapshot) => {
         const data = snapshot.val();
@@ -414,10 +421,19 @@
       });
 
     } else {
-      document.getElementById('syncStatus').innerHTML = `
-        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Local Demo Mode
-      `;
-      document.getElementById('syncStatus').className = "inline-flex items-center gap-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-normal";
+      initFilterState();
+      renderFilterPills();
+    }
+
+    function initFilterState() {
+      categories.forEach(c => {
+        if (activeColorFilters[c.hex] === undefined) {
+          activeColorFilters[c.hex] = true;
+        }
+      });
+      if (categories.length > 0 && !selectedColor) {
+        selectedColor = categories[0].hex;
+      }
     }
 
     const mapImage = document.getElementById('mapImage');
@@ -451,14 +467,13 @@
       const container = document.getElementById('colorFiltersContainer');
       container.innerHTML = '';
 
-      COLOR_DEFS.forEach(c => {
-        const isActive = activeColorFilters[c.hex];
-        const label = colorTagMap[c.hex] || c.defaultLabel;
+      categories.forEach(c => {
+        const isActive = activeColorFilters[c.hex] !== false;
 
         const pill = document.createElement('button');
         pill.type = 'button';
         pill.className = `flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold transition border border-gray-800 ${isActive ? 'bg-gray-800 text-gray-200' : 'filter-pill-inactive bg-gray-900 text-gray-500'}`;
-        pill.innerHTML = `<span class="w-2.5 h-2.5 rounded-full" style="background-color: ${c.hex}"></span><span>${escapeHtml(label)}</span>`;
+        pill.innerHTML = `<span class="w-2.5 h-2.5 rounded-full" style="background-color: ${c.hex}"></span><span>${escapeHtml(c.label)}</span>`;
 
         pill.addEventListener('click', () => {
           activeColorFilters[c.hex] = !activeColorFilters[c.hex];
@@ -474,15 +489,14 @@
       const picker = document.getElementById('colorPicker');
       picker.innerHTML = '';
 
-      COLOR_DEFS.forEach(c => {
-        const label = colorTagMap[c.hex] || c.defaultLabel;
+      categories.forEach(c => {
         const isSelected = selectedColor === c.hex;
 
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `color-opt flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition ${isSelected ? 'border-white bg-gray-800 text-white scale-105' : 'border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700'}`;
         btn.setAttribute('data-color', c.hex);
-        btn.innerHTML = `<span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${c.hex}"></span><span>${escapeHtml(label)}</span>`;
+        btn.innerHTML = `<span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${c.hex}"></span><span>${escapeHtml(c.label)}</span>`;
 
         btn.addEventListener('click', () => {
           selectedColor = c.hex;
@@ -495,21 +509,33 @@
 
     // Tag Editor Modal Operations
     const tagEditorModal = document.getElementById('tagEditorModal');
-    document.getElementById('editTagsBtn').addEventListener('click', () => {
+    
+    function renderTagEditorList() {
       const container = document.getElementById('tagInputsContainer');
       container.innerHTML = '';
 
-      COLOR_DEFS.forEach(c => {
-        const label = colorTagMap[c.hex] || c.defaultLabel;
+      categories.forEach((c, idx) => {
         const row = document.createElement('div');
-        row.className = 'flex items-center gap-3';
+        row.className = 'flex items-center gap-2.5';
         row.innerHTML = `
-          <span class="w-4 h-4 rounded-full shrink-0" style="background-color: ${c.hex}"></span>
-          <input type="text" data-color="${c.hex}" value="${escapeHtml(label)}" class="tag-input-field flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          <input type="color" data-idx="${idx}" value="${c.hex}" class="cat-color-input w-6 h-6 rounded bg-transparent border-0 cursor-pointer">
+          <input type="text" data-idx="${idx}" value="${escapeHtml(c.label)}" class="cat-label-input flex-1 bg-gray-950 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          <button type="button" data-idx="${idx}" class="remove-cat-btn text-gray-600 hover:text-red-400 p-1 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
         `;
         container.appendChild(row);
       });
 
+      document.querySelectorAll('.remove-cat-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
+          categories.splice(idx, 1);
+          renderTagEditorList();
+        });
+      });
+    }
+
+    document.getElementById('editTagsBtn').addEventListener('click', () => {
+      renderTagEditorList();
       tagEditorModal.classList.remove('opacity-0', 'pointer-events-none');
     });
 
@@ -517,14 +543,32 @@
       tagEditorModal.classList.add('opacity-0', 'pointer-events-none');
     });
 
+    document.getElementById('addNewTagBtn').addEventListener('click', () => {
+      const hex = document.getElementById('newTagColor').value;
+      const label = document.getElementById('newTagName').value.trim();
+      if (!label) return;
+
+      categories.push({ id: 'cat_' + Date.now(), hex, label });
+      activeColorFilters[hex] = true;
+      document.getElementById('newTagName').value = '';
+      renderTagEditorList();
+    });
+
     document.getElementById('saveTagsBtn').addEventListener('click', () => {
-      document.querySelectorAll('.tag-input-field').forEach(input => {
-        const hex = input.getAttribute('data-color');
-        const val = input.value.trim();
-        if (val) colorTagMap[hex] = val;
+      document.querySelectorAll('.cat-label-input').forEach(input => {
+        const idx = parseInt(input.getAttribute('data-idx'));
+        const colorInput = document.querySelector(`.cat-color-input[data-idx="${idx}"]`);
+        if (categories[idx]) {
+          categories[idx].label = input.value.trim() || 'Unlabeled';
+          categories[idx].hex = colorInput.value;
+        }
       });
 
-      localStorage.setItem('map_color_tags', JSON.stringify(colorTagMap));
+      if (isFirebaseConfigured && categoriesRef) {
+        categoriesRef.set(categories);
+      }
+
+      initFilterState();
       renderFilterPills();
       renderModalColorPicker();
       renderPins();
@@ -746,12 +790,16 @@
       closeModal();
     });
 
+    function getTagLabel(colorHex) {
+      const match = categories.find(c => c.hex.toLowerCase() === colorHex.toLowerCase());
+      return match ? match.label : "Pin";
+    }
+
     function renderPins() {
       pinOverlay.innerHTML = '';
       
       const filter = searchInput.value.toLowerCase().trim();
       
-      // Filter pins by text search AND active color category selection
       const filteredPins = pins.filter(p => {
         const matchesColor = activeColorFilters[p.color] !== false;
         const matchesText = p.name.toLowerCase().includes(filter) || (p.notes && p.notes.toLowerCase().includes(filter));
@@ -768,9 +816,8 @@
         pinList.innerHTML = '';
       }
 
-      // Render only pins matching active color filter onto the map viewport
       filteredPins.forEach((pin) => {
-        const tagLabel = colorTagMap[pin.color] || "Pin";
+        const tagLabel = getTagLabel(pin.color);
         const marker = document.createElement('div');
         marker.className = 'map-marker absolute group pointer-events-auto';
         marker.style.left = `${pin.x}%`;
@@ -798,9 +845,8 @@
         pinOverlay.appendChild(marker);
       });
 
-      // Render Sidebar Items
       filteredPins.forEach((pin) => {
-        const tagLabel = colorTagMap[pin.color] || "Tag";
+        const tagLabel = getTagLabel(pin.color);
         const item = document.createElement('div');
         item.className = 'bg-gray-950/80 hover:bg-gray-800/80 border border-gray-800/80 rounded-xl p-3 transition flex items-center justify-between group cursor-default';
         item.innerHTML = `
@@ -869,7 +915,7 @@
     });
 
     document.getElementById('exportBtn').addEventListener('click', () => {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ pins, strokes }, null, 2));
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ pins, strokes, categories }, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
       downloadAnchor.setAttribute("download", "map_tactical_data.json");
@@ -877,9 +923,6 @@
       downloadAnchor.click();
       downloadAnchor.remove();
     });
-
-    // Initialize UI Component Views
-    renderFilterPills();
   </script>
 </body>
 </html>
